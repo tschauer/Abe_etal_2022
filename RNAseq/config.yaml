@@ -1,0 +1,4 @@
+rawDataDir: .
+genomeFTP: ftp://ftp.ensembl.org/pub/release-101/fasta/mus_musculus/dna/Mus_musculus.GRCm38.dna.primary_assembly.fa.gz
+gtfGTP: ftp://ftp.ensembl.org/pub/release-101/gtf/mus_musculus/Mus_musculus.GRCm38.101.gtf.gz
+erccHTTP: https://assets.thermofisher.com/TFS-Assets/LSG/manuals/ERCC92.zip

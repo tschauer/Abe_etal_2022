@@ -1,0 +1,50 @@
+{
+  "__default__" :
+  {
+    "n" : 4,
+    "partition" : "normal_q",
+    "exclude" : "csix012272700ser,csix012262100ser","cpusrv31",
+    "time" : "48:00:00",
+    "mem": "40G",
+  },
+
+
+  "comp_scaled" :
+  {
+    "n": 4,
+    "mem": "60G"
+  },
+
+
+  "bam2coverage" :
+  {
+    "n": 4,
+    "mem": "60G"
+  },
+
+  "bam2counts" :
+  {
+    "n": 4,
+    "mem": "60G"
+  },
+
+
+  "bowtie" :
+  {
+    "n": 12,
+    "mem": "40G"
+  },
+
+  "cutadapt" :
+  {
+    "n": 12,
+    "mem": "40G"
+  },
+
+  "index_bowtie" :
+  {
+    "n": 12,
+    "mem": "40G"
+  },
+
+}

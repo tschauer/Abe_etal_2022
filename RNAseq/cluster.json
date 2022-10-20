@@ -1,0 +1,35 @@
+{
+    "__default__" :
+    {
+      "n" : 8,
+      "partition" : "normal_q",
+      "exclude" : "csix012250300ser,csix0142102ser,csix0142135ser,csix0142138ser,csix0142202ser,csix012261800ser,csix012271500ser,csix0142205ser",
+      "time" : "24:00:00",
+      "mem": "24G",
+    },
+
+    "RSEM" :
+    {
+      "n": 12,
+      "mem": "64G"
+    },
+
+    "bedtools" :
+    {
+      "n": 12,
+      "mem": "64G"
+    },
+
+    "star_align" :
+    {
+      "n": 12,
+      "mem": "64G"
+    },
+
+    "star_index" :
+    {
+      "n": 12,
+      "mem": "64G"
+    }
+
+}

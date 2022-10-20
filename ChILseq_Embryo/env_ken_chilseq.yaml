@@ -1,0 +1,36 @@
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - snakemake-minimal =5.2.4
+  - python =3.6
+  - pandas
+  - sra-tools =2.9
+  - samtools =1.3
+  - cutadapt =3.4
+  - bowtie2 =2.3.5
+  - bedtools = 2.29.0
+  - homer =4.10
+  - r =3.6.0
+  - r-zoo =1.8_6
+  - r-pheatmap =1.0.12
+  - r-devtools =2.4.1
+  - r-gdata =2.18.0
+  - r-imputelcmd =2.0
+  - bioconductor-rtracklayer
+  - bioconductor-ShortRead
+  - bioconductor-hilbertvis
+  - bioconductor-rbgl
+  - bioconductor-graph
+  - bioconductor-topGO
+  - bioconductor-go.db
+  - bioconductor-org.Mm.eg.db
+  - bioconductor-org.Dm.eg.db
+  - bioconductor-DESeq2
+  - bioconductor-sva
+  - tbb=2020.2
+  - r-multcomp =1.4_17
+  - r-gplots =3.1.1
+  - r-ggplot2
+  - r-ggpubr
+  - libcurl

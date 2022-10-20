@@ -1,0 +1,376 @@
+
+configfile: "config.yaml"
+
+import pandas as pd
+
+sample_table = pd.read_table("SampleTable.txt")
+
+SIDs = list(sample_table["SampleID"].unique())
+FIDs = list(sample_table["ForeignID"].unique())
+TIDs = ['genebody','TSS','TTS','GB5']
+GIDs =  list(set([x[:-2] for x in FIDs]))
+
+
+
+rule all:
+    input:
+        expand("FastQ/{SID}_1_trimmed.fastq.gz", SID=SIDs),
+        expand("FastQ/{SID}_2_trimmed.fastq.gz", SID=SIDs),
+        expand("Output/BAM/{FID}.bam", FID=FIDs),
+        expand("Output/read_summary/{FID}_raw.txt", FID=FIDs),
+        expand("Output/read_summary/{FID}_trimmed.txt", FID=FIDs),
+        expand("Output/read_summary/{FID}_mapped.txt", FID=FIDs),
+        expand("Output/read_summary/{FID}_mapped2.txt", FID=FIDs),
+        expand("Output/read_summary/{FID}_filtered.txt", FID=FIDs),
+        "Output/read_summary/read_summary.txt",
+        expand("Output/coverage/{FID}_ranges.rds", FID=FIDs),
+        expand("Output/coverage/{FID}_norm_coverage.bw", FID=FIDs),
+        expand("Output/coverage/{FID}_norm_coverage.rds", FID=FIDs),
+        expand("Output/matrix/{FID}_TSS_matrix.rds", FID=FIDs),
+        expand("Output/matrix/{FID}_TTS_matrix.rds", FID=FIDs),
+        expand("Output/matrix_ave/{GID}_TSS_matrix.rds", GID = GIDs),
+        expand("Output/matrix_ave/{GID}_TTS_matrix.rds", GID = GIDs),
+        expand("Output/counts/genebody.{FID}.rda", FID=FIDs),
+        expand("Output/counts/TSS.{FID}.rda", FID=FIDs),
+        expand("Output/counts/TTS.{FID}.rda", FID=FIDs),
+        expand("Output/counts/bins.{FID}.rda", FID=FIDs),
+        expand("Output/counts/b10.{FID}.rda", FID=FIDs),
+        expand("Output/counts/exons.{FID}.rda", FID=FIDs),
+        expand("Output/counts/introns.{FID}.rda", FID=FIDs),
+        expand("Output/counts/intergenic.{FID}.rda", FID=FIDs),
+        expand("Output/deseq2_{TID}/results/sessionInfo.txt", TID=TIDs),
+        expand("Output/deseq2_{TID}/plotsnew_{SET}/sessionInfo.txt", TID=['genebody'], SET = ['IgGnorm']),
+        # expand("Output/deseq2_{TID}/plots_{SET}/sessionInfo.txt", TID=TIDs, SET = ['minmedian','NAmedian','filtmedian']),
+        expand("Output/deseq2_{TID}/plots_{SET}/sessionInfo.txt", TID=TIDs, SET = ['NAmedian']),
+        #expand("Output/deseq2_{TID}/corrs_{SET}_{SCA}/sessionInfo.txt", TID=['genebody','TSS','GB5'], SET = ['min','NA','filt'], SCA=['zy','len','mean']),
+        expand("Output/deseq2_{TID}/corrs_{SET}_{SCA}/sessionInfo.txt", TID=['genebody','TSS','GB5'], SET = ['NA'], SCA=['len']),
+        #"Output/traveling/sessionInfo.txt",
+        expand("Output/composite_plots/composite.{GID}.pdf", GID = GIDs),
+        expand("Output/composite_plotsnew_IgGnorm/composite.{GID}.pdf", GID = GIDs),
+        "Output/composite_plots/scaled_composite2.pdf",
+        "Output/read_annotation/sessionInfo.txt",
+
+
+
+rule read_annotation:
+    input:
+        table="SampleTable.txt",
+        counts=expand("Output/counts/{TID}.{FID}.rda", FID=FIDs, TID=['TSS','TTS','introns','exons','intergenic']),
+    output:
+        session="Output/read_annotation/sessionInfo.txt",
+    threads: 12
+    shell:
+        """
+        Rscript --vanilla scripts/read_annotation.R {input} {output}
+        """
+
+
+rule comp_scaled:
+    input:
+        table="SampleTable.txt",
+        TSS=expand("Output/matrix_ave/{GID}_TSS_matrix.rds", GID=GIDs),
+        TTS=expand("Output/matrix_ave/{GID}_TTS_matrix.rds", GID=GIDs),
+    output:
+        plot="Output/composite_plots/scaled_composite2.pdf",
+    shell:
+        """
+        Rscript --vanilla scripts/comp_scaled.R {input} {output}
+        """
+
+
+rule compare_histone:
+    input:
+        table="SampleTable.txt",
+        session="Output/deseq2_{TID}/results/sessionInfo.txt",
+    output:
+        session="Output/deseq2_{TID}/corrs_{SET}/sessionInfo.txt",
+    threads: 12
+    shell:
+        """
+        Rscript --vanilla scripts/compare_histone.R {input} {output}
+        """
+
+rule composite_IgGnorm:
+    input:
+        table="SampleTable.txt",
+        TSS="Output/matrix_ave/{GID}_TSS_matrix.rds",
+        TTS="Output/matrix_ave/{GID}_TTS_matrix.rds",
+        IgG=expand("Output/matrix_ave/{GID}_{TID}_matrix.rds", GID=GIDs, TID=['TSS','TTS']),
+    output:
+        plot="Output/composite_plotsnew_IgGnorm/composite.{GID}.pdf",
+    shell:
+        """
+        Rscript --vanilla scripts/composite_IgGnorm.R {input.table} {input.TSS} {input.TTS} {output}
+        """
+
+
+rule composite:
+    input:
+        table="SampleTable.txt",
+        TSS="Output/matrix_ave/{GID}_TSS_matrix.rds",
+        TTS="Output/matrix_ave/{GID}_TTS_matrix.rds",
+    output:
+        plot="Output/composite_plots/composite.{GID}.pdf",
+    shell:
+        """
+        Rscript --vanilla scripts/composite.R {input} {output}
+        """
+
+rule matrix_averaging:
+    input:
+        table="SampleTable.txt",
+        TSS=expand("Output/matrix/{FID}_TSS_matrix.rds", FID=FIDs),
+        TTS=expand("Output/matrix/{FID}_TTS_matrix.rds", FID=FIDs),
+    output:
+        TSS="Output/matrix_ave/{GID}_TSS_matrix.rds",
+        TTS="Output/matrix_ave/{GID}_TTS_matrix.rds",
+    shell:
+        """
+        Rscript --vanilla scripts/matrix2average.R {input} {output}
+        """
+
+# rule traveling_ratio:
+#     input:
+#         table="SampleTable.txt",
+#         genebody="genome/ranges_genebody.rda",
+#         TSS="genome/ranges_TSS.rda",
+#         TTS="genome/ranges_TTS.rda",
+#         deseq2=expand("Output/deseq2_{TID}/results/sessionInfo.txt", TID=TIDs),
+#     output:
+#         session="Output/traveling/sessionInfo.txt",
+#     shell:
+#         """
+#         Rscript --vanilla scripts/traveling_ratio.R {input} {output}
+#         """
+
+rule explore_res_IgGnorm:
+    input:
+        table="SampleTable.txt",
+        session="Output/deseq2_{TID}/results/sessionInfo.txt",
+    output:
+        session="Output/deseq2_{TID}/plotsnew_{SET}/sessionInfo.txt",
+    shell:
+        """
+        Rscript --vanilla scripts/explore_res_IgGnorm.R {input} {output}
+        """
+
+rule explore_res:
+    input:
+        table="SampleTable.txt",
+        session="Output/deseq2_{TID}/results/sessionInfo.txt",
+    output:
+        session="Output/deseq2_{TID}/plots_{SET}/sessionInfo.txt",
+    threads: 12
+    shell:
+        """
+        Rscript --vanilla scripts/explore_res.R {input} {output}
+        """
+
+
+rule deseq2:
+    input:
+        table="SampleTable.txt",
+        counts=expand("Output/counts/{TID}.{FID}.rda", FID=FIDs, TID=TIDs),
+        bins=expand("Output/counts/bins.{FID}.rda", FID=FIDs)
+    output:
+        session="Output/deseq2_{TID}/results/sessionInfo.txt",
+    threads: 12
+    shell:
+        """
+        Rscript --vanilla scripts/deseq2.R {input} {output}
+        """
+
+
+rule bam2counts:
+    input:
+        bam="Output/BAM/{FID}.bam",
+        genebody="genome/ranges_genebody.rda",
+        TSS="genome/ranges_TSS.rda",
+        TTS="genome/ranges_TTS.rda",
+        GB5="genome/ranges_GB5.rda",
+        bins="genome/ranges_bins.rda",
+        b10="genome/ranges_b10.rda",
+        exons="genome/ranges_exons.rda",
+        introns="genome/ranges_introns.rda",
+        intergenic="genome/ranges_intergenic.rda",
+    output:
+        genebody="Output/counts/genebody.{FID}.rda",
+        TSS="Output/counts/TSS.{FID}.rda",
+        TTS="Output/counts/TTS.{FID}.rda",
+        GB5="Output/counts/GB5.{FID}.rda",
+        bins="Output/counts/bins.{FID}.rda",
+        b10="Output/counts/b10.{FID}.rda",
+        exons="Output/counts/exons.{FID}.rda",
+        introns="Output/counts/introns.{FID}.rda",
+        intergenic="Output/counts/intergenic.{FID}.rda",
+    shell:
+        """
+        Rscript --vanilla scripts/BAM2counts.R {input} {output}
+        """
+
+
+rule anno2ranges:
+    input:
+        gtf="genome/genome.gtf",
+        faidx="genome/genome.fa.fai"
+    output:
+        genebody="genome/ranges_genebody.rda",
+        TSS="genome/ranges_TSS.rda",
+        TTS="genome/ranges_TTS.rda",
+        GB5="genome/ranges_GB5.rda",
+        bins="genome/ranges_bins.rda",
+        b10="genome/ranges_b10.rda",
+        exons="genome/ranges_exons.rda",
+        introns="genome/ranges_introns.rda",
+        intergenic="genome/ranges_intergenic.rda",
+    shell:
+        """
+        Rscript --vanilla scripts/anno2ranges.R {input} {output}
+        """
+
+
+rule coverage2matrix:
+    input:
+        anno="genome/genome.gtf",
+        ncov="Output/coverage/{FID}_norm_coverage.rds"
+    output:
+        matTSS="Output/matrix/{FID}_TSS_matrix.rds",
+        matTTS="Output/matrix/{FID}_TTS_matrix.rds"
+    shell:
+        """
+        Rscript --vanilla scripts/coverage2matrix.R {input.anno} {input.ncov} {output.matTSS} {output.matTTS}
+        """
+
+
+rule bam2coverage:
+    input:
+        "Output/BAM/{FID}.bam"
+    output:
+        ranges="Output/coverage/{FID}_ranges.rds",
+        bigwig="Output/coverage/{FID}_norm_coverage.bw",
+        ncov="Output/coverage/{FID}_norm_coverage.rds"
+    params:
+        bothend="TRUE"
+    shell:
+        """
+        Rscript --vanilla scripts/BAM2ncov.R {input} {output.ranges} {output.bigwig} {output.ncov} {params.bothend}
+        """
+
+
+rule read_summary:
+    input:
+        raw=expand("Output/read_summary/{FID}_raw.txt", FID=FIDs),
+        trimmed=expand("Output/read_summary/{FID}_trimmed.txt", FID=FIDs),
+        mapped=expand("Output/read_summary/{FID}_mapped.txt", FID=FIDs),
+        mapped2=expand("Output/read_summary/{FID}_mapped2.txt", FID=FIDs),
+        filtered=expand("Output/read_summary/{FID}_filtered.txt", FID=FIDs),
+    output: "Output/read_summary/read_summary.txt",
+    threads: 12
+    shell:
+        """
+        Rscript --vanilla scripts/read_summary_table.R {input} {output}
+        """
+
+rule read_counting:
+    input:
+        bam="Output/BAM/{FID}.bam",
+        ranges="Output/coverage/{FID}_ranges.rds",
+    params:
+        mate1=lambda wildcards: " ".join(expand("FastQ/{sample}*_R1_001.fastq.gz",
+            sample=list(sample_table[sample_table['ForeignID']==wildcards.FID].SampleID))),
+        trimmed1=lambda wildcards: expand("FastQ/{sample}_1_trimmed.fastq.gz",
+            sample=list(sample_table[sample_table['ForeignID']==wildcards.FID].SampleID)),
+        bothend="TRUE"
+    output:
+        raw="Output/read_summary/{FID}_raw.txt",
+        trimmed="Output/read_summary/{FID}_trimmed.txt",
+        mapped="Output/read_summary/{FID}_mapped.txt",
+        mapped2="Output/read_summary/{FID}_mapped2.txt",
+        filtered="Output/read_summary/{FID}_filtered.txt",
+    threads: 12
+    shell:
+        """
+        zcat {params.mate1} | paste - - - - | wc -l > {output.raw}
+        zcat {params.trimmed1} | paste - - - - | wc -l > {output.trimmed}
+        samtools flagstat {input.bam} | grep "read1" | sed 's/ + 0 read1//' > {output.mapped}
+        Rscript --vanilla scripts/read_counting.R {input.ranges} {params.bothend} {output.mapped2} {output.filtered}
+        """
+
+
+rule bowtie:
+    input:
+        trimmed1=lambda wildcards: expand("FastQ/{sample}_1_trimmed.fastq.gz",
+            sample=list(sample_table[sample_table['ForeignID']==wildcards.FID].SampleID)),
+        trimmed2=lambda wildcards: expand("FastQ/{sample}_2_trimmed.fastq.gz",
+            sample=list(sample_table[sample_table['ForeignID']==wildcards.FID].SampleID)),
+        index="genome/genome.1.bt2"
+    params:
+        mate1=lambda wildcards: ",".join(expand("FastQ/{sample}_1_trimmed.fastq.gz",
+            sample=list(sample_table[sample_table['ForeignID']==wildcards.FID].SampleID))),
+        mate2=lambda wildcards: ",".join(expand("FastQ/{sample}_2_trimmed.fastq.gz",
+            sample=list(sample_table[sample_table['ForeignID']==wildcards.FID].SampleID)))
+    output:
+        bam="Output/BAM/{FID}.bam",
+        bai="Output/BAM/{FID}.bam.bai"
+    threads: 12
+    shell:
+        """
+        bowtie_opts="-p {threads} --end-to-end --very-sensitive --no-unal --no-mixed --no-discordant -I 10 -X 500"
+        bowtie2 $bowtie_opts -x genome/genome -1 {params.mate1} -2 {params.mate2} > Output/BAM/{wildcards.FID}.sam
+        samtools view -bS -@ {threads} -q 12 Output/BAM/{wildcards.FID}.sam | samtools sort -@ {threads} - | tee {output.bam} | samtools index - {output.bai}
+        rm Output/BAM/{wildcards.FID}.sam
+        """
+
+
+import os, glob
+
+rule cutadapt:
+    input:
+        fastq1=lambda wildcards: glob.glob('FastQ/' + wildcards.SID + '*_R1_001.fastq.gz'),
+        fastq2=lambda wildcards: glob.glob('FastQ/' + wildcards.SID + '*_R2_001.fastq.gz'),
+    output:
+        trimmed1="FastQ/{SID}_1_trimmed.fastq.gz",
+        trimmed2="FastQ/{SID}_2_trimmed.fastq.gz"
+    threads: 12
+    shell:
+        """
+        cutadapt_opts="-a CTGTCTCTTATA -A CTGTCTCTTATA --pair-filter=any --minimum-length=20 --cores {threads}"
+        cutadapt $cutadapt_opts -o {output.trimmed1} -p {output.trimmed2} {input.fastq1} {input.fastq2}
+        """
+
+
+rule index_bowtie:
+    input:
+        "genome/genome.fa"
+    output:
+        "genome/genome.1.bt2"
+    threads: 12
+    shell:
+        """
+        bowtie2-build --threads {threads} {input} genome/genome
+        """
+
+
+rule get_genome_files:
+    params:
+        genomeLocation=config['genomeFTP'],
+        gtfLocation=config['gtfGTP']
+    output:
+        "genome/genome.fa",
+        "genome/genome.fa.fai",
+        "genome/genome.gtf"
+    shell:
+        """
+        wget -O genome/genome.fa.gz {params.genomeLocation}
+        gunzip genome/genome.fa.gz
+
+        samtools faidx genome/genome.fa
+
+        wget -O genome/genome.gtf.gz {params.gtfLocation}
+        gunzip genome/genome.gtf.gz
+        """
+
+
+
+onsuccess:
+        print("Finished!")

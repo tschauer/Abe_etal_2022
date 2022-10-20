@@ -1,0 +1,67 @@
+{
+  "__default__" :
+  {
+    "n" : 4,
+    "partition" : "cpu_p",
+    "q" : "cpu",
+    "exclude" : "csix012272700ser,csix012262100ser",
+    "time" : "48:00:00",
+    "mem": "40G",
+  },
+
+
+  "comp_ratio" :
+  {
+    "n": 4,
+    "mem": "60G"
+  },
+
+    "comp_ratio_IgGnorm" :
+    {
+      "n": 4,
+      "mem": "80G"
+    },
+
+  "comp_scaled" :
+  {
+    "n": 4,
+    "mem": "60G"
+  },
+
+  "comp_scaled_IgGnorm" :
+  {
+    "n": 4,
+    "mem": "80G"
+  },
+
+  "bam2coverage" :
+  {
+    "n": 4,
+    "mem": "60G"
+  },
+
+  "bam2counts" :
+  {
+    "n": 4,
+    "mem": "60G"
+  },
+
+  "bowtie" :
+  {
+    "n": 12,
+    "mem": "40G"
+  },
+
+  "cutadapt" :
+  {
+    "n": 12,
+    "mem": "40G"
+  },
+
+  "index_bowtie" :
+  {
+    "n": 12,
+    "mem": "40G"
+  },
+
+}

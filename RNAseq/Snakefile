@@ -1,0 +1,211 @@
+configfile: "config.yaml"
+
+import pandas as pd
+import os, glob
+
+
+sample_table =  pd.read_table("SampleTable.txt")
+samples = list(sample_table['SampleID'])
+
+# everything that need network connection for
+localrules: get_index_files
+
+rule all:
+    input:
+        expand("fastqc/{ID}_fastqc.txt",              ID=samples),
+        expand("Output/BAM/{ID}.ReadsPerGene.out.tab", ID=samples),
+        expand("Output/rsem/{ID}_rsem.genes.results",  ID=samples),
+        expand("Output/bedgraph/{ID}.norm.bedgraph",  ID=samples),
+        expand("Output/bedgraph/{ID}.norm.tdf",  ID=samples),
+        expand("Output/frag_size/{ID}.pdf",  ID=samples),
+        "Output/TPM/TPM_means.txt",
+        "Output/deseq2/sessionInfo.txt",
+        expand("Output/deseq2/tables/sum_table.{DID}.txt", DID = ['All','Up','Down']),
+
+
+rule summarize_res:
+    input:
+        table="SampleTable.txt",
+        session="Output/deseq2/sessionInfo.txt",
+    output:
+        "Output/deseq2/tables/sum_table.{DID}.txt"
+    threads: 12
+    shell:
+        """
+        Rscript --vanilla scripts/summarize_res.R {input} {output}
+        """
+
+rule deseq2:
+    input:
+        anno="genome/txdb",
+        table="SampleTable.txt",
+        counts=expand("Output/BAM/{SN}.ReadsPerGene.out.tab", SN=sample_table["SampleID"]),
+    output:
+        lnc="Output/deseq2/tables/log2_norm_counts.txt",
+        pca="Output/deseq2/plots/PCA.pdf",
+        session="Output/deseq2/sessionInfo.txt",
+    shell:
+        """
+        Rscript --vanilla scripts/deseq2.R {input} {output}
+        """
+
+
+rule anno:
+    input:
+        anno="genome/combined.gtf",
+    output:
+        anno="genome/txdb",
+    shell:
+        """
+        Rscript --vanilla scripts/GTFtoTxdb.R {input.anno} {output.anno}
+        """
+
+
+rule TPM2table:
+    input:
+        "SampleTable.txt",
+        tpm=expand("Output/rsem/{SN}_rsem.genes.results", SN=sample_table["SampleID"]),
+    output:
+        table="Output/TPM/TPM_table.txt",
+        means="Output/TPM/TPM_means.txt"
+    shell:
+        """
+        Rscript --vanilla scripts/TPM2table.R {input} {output.table} {output.means}
+        """
+
+rule RSEM:
+    input:
+        "Output/BAM/{ID}.Aligned.toTranscriptome.out.bam",
+        index="star_index/genome"
+    output:
+        "Output/rsem/{ID}_rsem.genes.results"
+    threads: 12
+    shell:
+        """
+        rsem-calculate-expression --bam \
+        --paired-end --strandedness none \
+        -p {threads} \
+        Output/BAM/{wildcards.ID}.Aligned.toTranscriptome.out.bam {input.index} Output/rsem/{wildcards.ID}_rsem
+        """
+
+
+rule frag_size:
+    input:
+        "Output/BAM/{ID}.Aligned.sortedByCoord.out.bam",
+    output:
+        "Output/frag_size/{ID}.pdf",
+    threads: 12
+    shell:
+        """
+        Rscript --vanilla scripts/frag_size.R {input} {output}
+        """
+
+
+rule bedtools:
+    input:
+        "Output/BAM/{ID}.Aligned.sortedByCoord.out.bam",
+    output:
+        bedgraph="Output/bedgraph/{ID}.norm.bedgraph",
+        tdf="Output/bedgraph/{ID}.norm.tdf",
+    threads: 12
+    shell:
+        """
+        samtools index {input}
+
+        TOTAL=`samtools view -c -q 255 {input}`
+        SCALER=`echo "scale=10; 1/(${{TOTAL}}/1000000)" | bc`
+
+        genomeCoverageBed -ibam {input} -split -bg -scale ${{SCALER}} > {output.bedgraph}
+
+        igvtools toTDF -z 5 {output.bedgraph} {output.tdf} genome/combined_masked.fa
+        """
+
+
+rule star_align:
+    input:
+        mate1=lambda wildcards: glob.glob('FastQ/' + wildcards.ID + '*R1_001.fastq.gz'),
+        mate2=lambda wildcards: glob.glob('FastQ/' + wildcards.ID + '*R2_001.fastq.gz'),
+        index="star_index/Genome"
+    output:
+        "Output/BAM/{ID}.Aligned.toTranscriptome.out.bam",
+        "Output/BAM/{ID}.ReadsPerGene.out.tab",
+        "Output/BAM/{ID}.Aligned.sortedByCoord.out.bam",
+    threads: 12
+    params:
+        quantMode="TranscriptomeSAM GeneCounts",
+        outSAMtype="BAM SortedByCoordinate",
+        limitBAMsortRAM="40000000000",
+        readFilesCommand="gunzip -c"
+    shell:
+        """
+        STAR --genomeDir star_index \
+        --sjdbGTFfile genome/combined.gtf \
+        --runThreadN {threads} \
+        --readFilesCommand {params.readFilesCommand} \
+        --quantMode {params.quantMode} --outSAMtype {params.outSAMtype} \
+        --limitBAMsortRAM {params.limitBAMsortRAM} \
+        --readFilesIn {input.mate1} {input.mate2} \
+        --outFileNamePrefix Output/BAM/{wildcards.ID}.
+        """
+
+
+rule fastqc:
+    input:
+        fastq1=lambda wildcards: glob.glob('FastQ/' + wildcards.ID + '*R1_001.fastq.gz'),
+        fastq2=lambda wildcards: glob.glob('FastQ/' + wildcards.ID + '*R2_001.fastq.gz'),
+    output:
+        txt="fastqc/{ID}_fastqc.txt",
+    threads: 12
+    shell:
+        """
+        fastqc {input.fastq1} -t {threads} -o fastqc
+        fastqc {input.fastq2} -t {threads} -o fastqc
+        echo 'FastQC Finished!' > {output.txt}
+        """
+
+
+rule star_index:
+    input:
+        fasta="genome/combined_masked.fa",
+        gtf="genome/combined.gtf"
+    output:
+        "star_index/genome",
+        "star_index/Genome",
+        "star_index/genome.transcripts.fa",
+        "star_index/chrNameLength.txt"
+    threads: 12
+    shell:
+        """
+        rsem-prepare-reference --gtf {input.gtf} --star -p {threads} {input.fasta} star_index/genome
+        touch star_index/genome #hack for RSEM input
+        """
+
+rule get_index_files:
+    params:
+        genomeLocation=config['genomeFTP'],
+        gtfLocation=config['gtfGTP'],
+        erccLocation=config['erccHTTP'],
+    output:
+        "genome/combined_masked.fa",
+        "genome/combined_masked.fa.fai",
+        "genome/combined.gtf",
+    shell:
+        """
+        wget -O genome/genome.fa.gz {params.genomeLocation}
+        gunzip genome/genome.fa.gz
+
+        wget -O genome/ERCC92.zip {params.erccLocation}
+        unzip genome/ERCC92.zip -d genome
+
+        cat genome/genome.fa genome/ERCC92.fa genome/pGEMHE_mCherry_mTrim21.fa > genome/combined.fa
+        bedtools maskfasta -fi genome/combined.fa -bed genome/Trim21.bed -fo genome/combined_masked.fa
+        samtools faidx genome/combined_masked.fa
+
+        wget -O genome/genome.gtf.gz {params.gtfLocation}
+        gunzip genome/genome.gtf.gz
+
+        cat genome/genome.gtf genome/ERCC92.gtf genome/pGEMHE_mCherry_mTrim21.gtf > genome/combined.gtf
+        """
+
+onsuccess:
+        print("Finished!")
